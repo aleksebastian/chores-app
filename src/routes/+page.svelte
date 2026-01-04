@@ -9,7 +9,9 @@
 	let { form }: { form: ActionData } = $props();
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+<div
+	class="flex min-h-screen items-center justify-center bg-linear-to-br from-slate-50 to-slate-100 p-4"
+>
 	<div class="w-full max-w-4xl space-y-8">
 		<div class="text-center">
 			<h1 class="text-4xl font-bold tracking-tight text-slate-900">Chore Tracker</h1>
@@ -27,12 +29,7 @@
 					<form method="POST" action="?/createHome" use:enhance class="space-y-4">
 						<div class="space-y-2">
 							<Label for="name">Home Name</Label>
-							<Input
-								id="name"
-								name="name"
-								placeholder="Our Home"
-								required
-							/>
+							<Input id="name" name="name" placeholder="Our Home" required />
 						</div>
 						{#if form?.error}
 							<p class="text-sm text-red-600">{form.error}</p>
@@ -57,7 +54,7 @@
 								name="shareCode"
 								placeholder="ABC123"
 								class="uppercase"
-								maxlength="6"
+								maxlength={6}
 								required
 							/>
 						</div>

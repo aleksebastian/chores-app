@@ -16,14 +16,14 @@
 	let selectedRoomId = $state<string>('');
 	let selectedRoomName = $state<string>('');
 	let copySuccess = $state(false);
-	
+
 	// Confirmation dialogs
 	let confirmDeleteRoomOpen = $state(false);
 	let confirmDeleteChoreOpen = $state(false);
 	let confirmLeaveHomeOpen = $state(false);
 	let roomToDelete = $state<string>('');
 	let choreToDelete = $state<string>('');
-	
+
 	// Common household chores
 	const commonChores = [
 		'Vacuum floors',
@@ -71,7 +71,7 @@
 	function copyShareCode() {
 		navigator.clipboard.writeText(data.home.shareCode);
 		copySuccess = true;
-		setTimeout(() => copySuccess = false, 2000);
+		setTimeout(() => (copySuccess = false), 2000);
 	}
 
 	function getDaysUntilDue(chore: any): string {
@@ -93,19 +93,19 @@
 		selectedRoomName = roomName;
 		addChoreDialogOpen = true;
 	}
-	
+
 	function confirmDeleteRoom(roomId: string) {
 		roomToDelete = roomId;
 		confirmDeleteRoomOpen = true;
 	}
-	
+
 	function confirmDeleteChore(choreId: string) {
 		choreToDelete = choreId;
 		confirmDeleteChoreOpen = true;
 	}
 </script>
 
-<div class="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4">
+<div class="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4">
 	<div class="mx-auto max-w-6xl space-y-6 py-8">
 		<!-- Header -->
 		<div class="flex items-center justify-between">
@@ -113,13 +113,13 @@
 				<h1 class="text-3xl font-bold tracking-tight text-slate-900">{data.home.name}</h1>
 				<p class="mt-1 text-sm text-slate-600">Manage your household chores</p>
 			</div>
-			
-		<Button variant="outline" onclick={() => confirmLeaveHomeOpen = true}>Leave Home</Button>
+
+			<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
 		</div>
 
 		<!-- Share Code Card -->
 		<Card.Root class="border-blue-200 bg-blue-50">
-			<Card.Content class="flex items-center justify-between pt-6">
+			<Card.Content class="flex items-center justify-between">
 				<div>
 					<p class="text-sm font-medium text-slate-900">Share Code</p>
 					<p class="mt-1 font-mono text-2xl font-bold tracking-wider text-blue-600">
@@ -137,7 +137,7 @@
 		<!-- Add Room Button -->
 		<div class="flex items-center justify-between">
 			<h2 class="text-xl font-semibold text-slate-900">Rooms</h2>
-			<Button size="sm" onclick={() => addRoomDialogOpen = true}>
+			<Button size="sm" onclick={() => (addRoomDialogOpen = true)}>
 				<Plus class="mr-2 h-4 w-4" />
 				Add Room
 			</Button>
@@ -160,7 +160,11 @@
 							<div class="flex items-start justify-between">
 								<div>
 									<Card.Title>{room.name}</Card.Title>
-									<Card.Description>{room.chores.length} chore{room.chores.length !== 1 ? 's' : ''}</Card.Description>
+									<Card.Description
+										>{room.chores.length} chore{room.chores.length !== 1
+											? 's'
+											: ''}</Card.Description
+									>
 								</div>
 								<div class="flex gap-1">
 									<Button
@@ -195,9 +199,13 @@
 														<Check class="h-4 w-4 text-green-600" />
 													</Button>
 												</form>
-											<Button size="sm" variant="ghost" onclick={() => confirmDeleteChore(chore.id)}>
-												<Trash2 class="h-4 w-4 text-red-500" />
-											</Button>
+												<Button
+													size="sm"
+													variant="ghost"
+													onclick={() => confirmDeleteChore(chore.id)}
+												>
+													<Trash2 class="h-4 w-4 text-red-500" />
+												</Button>
 											</div>
 										</div>
 										<div class="space-y-1">
@@ -224,9 +232,9 @@
 			<Dialog.Title>Add a New Room</Dialog.Title>
 			<Dialog.Description>Create a room to organize your chores</Dialog.Description>
 		</Dialog.Header>
-		<form 
-			method="POST" 
-			action="?/createRoom" 
+		<form
+			method="POST"
+			action="?/createRoom"
 			use:enhance={() => {
 				return async ({ update }) => {
 					await update();
@@ -237,12 +245,7 @@
 		>
 			<div class="space-y-2">
 				<Label for="room-name">Room Name</Label>
-				<Input
-					id="room-name"
-					name="name"
-					placeholder="Kitchen"
-					required
-				/>
+				<Input id="room-name" name="name" placeholder="Kitchen" required />
 			</div>
 			<Button type="submit" class="w-full">Add Room</Button>
 		</form>
@@ -256,9 +259,9 @@
 			<Dialog.Title>Add a Chore</Dialog.Title>
 			<Dialog.Description>Add a new chore to {selectedRoomName}</Dialog.Description>
 		</Dialog.Header>
-		<form 
-			method="POST" 
-			action="?/createChore" 
+		<form
+			method="POST"
+			action="?/createChore"
 			use:enhance={() => {
 				return async ({ update }) => {
 					await update();
@@ -305,10 +308,14 @@
 	<Dialog.Content>
 		<Dialog.Header>
 			<Dialog.Title>Leave Home?</Dialog.Title>
-			<Dialog.Description>Are you sure you want to leave this home? You'll need the share code to rejoin.</Dialog.Description>
+			<Dialog.Description
+				>Are you sure you want to leave this home? You'll need the share code to rejoin.</Dialog.Description
+			>
 		</Dialog.Header>
 		<div class="flex gap-2">
-			<Button variant="outline" class="flex-1" onclick={() => confirmLeaveHomeOpen = false}>Cancel</Button>
+			<Button variant="outline" class="flex-1" onclick={() => (confirmLeaveHomeOpen = false)}
+				>Cancel</Button
+			>
 			<form method="POST" action="?/leaveHome" use:enhance class="flex-1">
 				<Button type="submit" variant="destructive" class="w-full">Leave Home</Button>
 			</form>
@@ -321,16 +328,25 @@
 	<Dialog.Content>
 		<Dialog.Header>
 			<Dialog.Title>Delete Room?</Dialog.Title>
-			<Dialog.Description>Are you sure you want to delete this room? All chores in this room will also be deleted.</Dialog.Description>
+			<Dialog.Description
+				>Are you sure you want to delete this room? All chores in this room will also be deleted.</Dialog.Description
+			>
 		</Dialog.Header>
 		<div class="flex gap-2">
-			<Button variant="outline" class="flex-1" onclick={() => confirmDeleteRoomOpen = false}>Cancel</Button>
-			<form method="POST" action="?/deleteRoom" use:enhance={() => {
-				return async ({ update }) => {
-					await update();
-					confirmDeleteRoomOpen = false;
-				};
-			}} class="flex-1">
+			<Button variant="outline" class="flex-1" onclick={() => (confirmDeleteRoomOpen = false)}
+				>Cancel</Button
+			>
+			<form
+				method="POST"
+				action="?/deleteRoom"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update();
+						confirmDeleteRoomOpen = false;
+					};
+				}}
+				class="flex-1"
+			>
 				<input type="hidden" name="roomId" value={roomToDelete} />
 				<Button type="submit" variant="destructive" class="w-full">Delete Room</Button>
 			</form>
@@ -346,13 +362,20 @@
 			<Dialog.Description>Are you sure you want to delete this chore?</Dialog.Description>
 		</Dialog.Header>
 		<div class="flex gap-2">
-			<Button variant="outline" class="flex-1" onclick={() => confirmDeleteChoreOpen = false}>Cancel</Button>
-			<form method="POST" action="?/deleteChore" use:enhance={() => {
-				return async ({ update }) => {
-					await update();
-					confirmDeleteChoreOpen = false;
-				};
-			}} class="flex-1">
+			<Button variant="outline" class="flex-1" onclick={() => (confirmDeleteChoreOpen = false)}
+				>Cancel</Button
+			>
+			<form
+				method="POST"
+				action="?/deleteChore"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update();
+						confirmDeleteChoreOpen = false;
+					};
+				}}
+				class="flex-1"
+			>
 				<input type="hidden" name="choreId" value={choreToDelete} />
 				<Button type="submit" variant="destructive" class="w-full">Delete Chore</Button>
 			</form>
