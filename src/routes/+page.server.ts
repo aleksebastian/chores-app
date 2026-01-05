@@ -1,18 +1,67 @@
 import { db } from '$lib/server/db';
-import { homes } from '$lib/server/db/schema';
+import { homes, homeMemberships } from '$lib/server/db/schema';
 import { fail, redirect } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
 
-export const load: PageServerLoad = async ({ cookies }) => {
-	const homeId = cookies.get('homeId');
-	
-	if (homeId) {
-		// User already has a home, redirect to dashboard
-		throw redirect(302, '/home');
+export const load: PageServerLoad = async ({ locals, url }) => {
+	// Not authenticated - redirect to login (preserve code param)
+	if (!locals.user) {
+		const code = url.searchParams.get('code');
+		if (code) {
+			throw redirect(302, `/login?redirect=${encodeURIComponent(`/?code=${code}`)}`);
+		}
+		throw redirect(302, '/login');
 	}
-	
-	return {};
+
+	// Check for share code in URL
+	const shareCode = url.searchParams.get('code');
+	if (shareCode) {
+		// Try to join home with this code
+		const [home] = await db.select().from(homes).where(eq(homes.shareCode, shareCode.toUpperCase()));
+		
+		if (home) {
+			// Check if user is already a member
+			const existingMembership = await db
+				.select()
+				.from(homeMemberships)
+				.where(and(
+					eq(homeMemberships.userId, locals.user.id),
+					eq(homeMemberships.homeId, home.id)
+				));
+
+			if (existingMembership.length > 0) {
+				// Already a member, just redirect
+				throw redirect(302, `/home/${home.id}`);
+			}
+
+			// Add as member and redirect (handled by joinHome action)
+			// For now, just pass the code to the page to auto-fill
+		}
+	}
+
+	// Get user's homes
+	const userHomes = await db
+		.select({
+			id: homes.id,
+			name: homes.name,
+			shareCode: homes.shareCode,
+			role: homeMemberships.role
+		})
+		.from(homeMemberships)
+		.innerJoin(homes, eq(homeMemberships.homeId, homes.id))
+		.where(eq(homeMemberships.userId, locals.user.id));
+
+	// If user has exactly one home, redirect to it
+	if (userHomes.length === 1 && !shareCode) {
+		throw redirect(302, `/home/${userHomes[0].id}`);
+	}
+
+	// Return homes for selection
+	return {
+		homes: userHomes,
+		shareCode: shareCode || undefined
+	};
 };
 
 function generateShareCode(): string {
@@ -20,7 +69,11 @@ function generateShareCode(): string {
 }
 
 export const actions: Actions = {
-	createHome: async ({ request, cookies }) => {
+	createHome: async ({ request, locals }) => {
+		if (!locals.user) {
+			throw redirect(302, '/login');
+		}
+
 		const data = await request.formData();
 		const name = data.get('name')?.toString();
 
@@ -38,24 +91,31 @@ export const actions: Actions = {
 			attempts++;
 		}
 
-		const [home] = await db.insert(homes).values({
-			name: name.trim(),
-			shareCode
-		}).returning();
+		// Create home
+		const [home] = await db
+			.insert(homes)
+			.values({
+				name: name.trim(),
+				shareCode,
+				lastMemberLeftAt: null
+			})
+			.returning();
 
-		// Set cookie with home ID
-		cookies.set('homeId', home.id, {
-			path: '/',
-			maxAge: 60 * 60 * 24 * 365, // 1 year
-			httpOnly: true,
-			secure: process.env.NODE_ENV === 'production',
-			sameSite: 'lax'
+		// Add user as owner
+		await db.insert(homeMemberships).values({
+			userId: locals.user.id,
+			homeId: home.id,
+			role: 'owner'
 		});
 
-		throw redirect(303, '/home');
+		throw redirect(303, `/home/${home.id}`);
 	},
 
-	joinHome: async ({ request, cookies }) => {
+	joinHome: async ({ request, locals }) => {
+		if (!locals.user) {
+			throw redirect(302, '/login');
+		}
+
 		const data = await request.formData();
 		const shareCode = data.get('shareCode')?.toString()?.toUpperCase();
 
@@ -69,15 +129,37 @@ export const actions: Actions = {
 			return fail(404, { error: 'Home not found with that share code' });
 		}
 
-		// Set cookie with home ID
-		cookies.set('homeId', home.id, {
-			path: '/',
-			maxAge: 60 * 60 * 24 * 365, // 1 year
-			httpOnly: true,
-			secure: process.env.NODE_ENV === 'production',
-			sameSite: 'lax'
+		// Check if user is already a member
+		const existingMembership = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(
+				eq(homeMemberships.userId, locals.user.id),
+				eq(homeMemberships.homeId, home.id)
+			));
+
+		if (existingMembership.length > 0) {
+			throw redirect(303, `/home/${home.id}`);
+		}
+
+		// Check if home has any members (orphaned home)
+		const existingMembers = await db
+			.select()
+			.from(homeMemberships)
+			.where(eq(homeMemberships.homeId, home.id));
+
+		const role = existingMembers.length === 0 ? 'owner' : 'member';
+
+		// Add user as member (or owner if orphaned)
+		await db.insert(homeMemberships).values({
+			userId: locals.user.id,
+			homeId: home.id,
+			role
 		});
 
-		throw redirect(303, '/home');
+		// Clear lastMemberLeftAt since someone joined
+		await db.update(homes).set({ lastMemberLeftAt: null }).where(eq(homes.id, home.id));
+
+		throw redirect(303, `/home/${home.id}`);
 	}
 };

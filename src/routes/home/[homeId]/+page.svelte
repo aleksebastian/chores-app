@@ -45,6 +45,7 @@
 	let copySuccess = $state(false);
 	let newRoomName = $state('');
 	let selectedIcon = $state('HomeIcon');
+	let inviteUrl = $state('');
 
 	let draggedRoomId = $state<string | null>(null);
 	let draggedOverRoomId = $state<string | null>(null);
@@ -53,8 +54,10 @@
 	let confirmDeleteRoomOpen = $state(false);
 	let confirmDeleteChoreOpen = $state(false);
 	let confirmLeaveHomeOpen = $state(false);
+	let confirmRemoveMemberOpen = $state(false);
 	let roomToDelete = $state<string>('');
 	let choreToDelete = $state<string>('');
+	let memberToRemove = $state<{ id: string; name: string } | null>(null);
 
 	// Edit chore state
 	let choreToEdit = $state<any>(null);
@@ -111,6 +114,21 @@
 		copySuccess = true;
 		setTimeout(() => (copySuccess = false), 2000);
 	}
+
+	function copyInviteLink() {
+		if (typeof window !== 'undefined') {
+			navigator.clipboard.writeText(inviteUrl);
+			copySuccess = true;
+			setTimeout(() => (copySuccess = false), 2000);
+		}
+	}
+
+	// Set invite URL on client side only
+	$effect(() => {
+		if (typeof window !== 'undefined') {
+			inviteUrl = `${window.location.origin}/?code=${data.home.shareCode}`;
+		}
+	});
 
 	function getDaysUntilDue(chore: any): string {
 		if (!chore.lastCompletedAt) return 'Never completed';
@@ -282,40 +300,121 @@
 
 <div class="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4">
 	<div class="mx-auto max-w-6xl space-y-6 py-8">
-		<!-- Header -->
+		<!-- Header with Home Switcher -->
 		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-3xl font-bold tracking-tight text-slate-900">{data.home.name}</h1>
-				<p class="mt-1 text-sm text-slate-600">Manage your household chores</p>
+			<div class="flex items-center gap-4">
+				{#if data.userHomes && data.userHomes.length > 1}
+					<select
+						onchange={(e) => (window.location.href = `/home/${e.currentTarget.value}`)}
+						class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+					>
+						{#each data.userHomes as home}
+							<option value={home.id} selected={home.id === data.home.id}>
+								{home.name}
+							</option>
+						{/each}
+					</select>
+				{:else}
+					<div>
+						<h1 class="text-3xl font-bold tracking-tight text-slate-900">{data.home.name}</h1>
+						<p class="mt-1 text-sm text-slate-600">Manage your household chores</p>
+					</div>
+				{/if}
 			</div>
 
-			<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
+			<div class="flex gap-2">
+				<Button variant="outline" onclick={() => (window.location.href = '/settings')}>
+					Settings
+				</Button>
+				<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
+			</div>
 		</div>
 
-		<!-- Share Code Accordion -->
+		<!-- Share Code and Invite Section -->
 		<Accordion.Root type="single" class="rounded-lg border-blue-200 bg-blue-50">
 			<Accordion.Item value="share-code">
 				<Accordion.Trigger class="px-6 py-4 hover:bg-blue-100/50">
-					<span class="text-sm font-medium text-slate-900">Share Code</span>
+					<span class="text-sm font-medium text-slate-900">Invite Others</span>
 				</Accordion.Trigger>
 				<Accordion.Content class="px-6 pb-4">
-					<div class="flex items-center justify-between pt-2">
-						<div>
-							<p class="font-mono text-2xl font-bold tracking-wider text-blue-600">
-								{data.home.shareCode}
-							</p>
-							<p class="mt-1 text-xs text-slate-600">
-								Share this code with others to give them access
-							</p>
+					<div class="space-y-4 pt-2">
+						<div class="flex items-center justify-between">
+							<div>
+								<p class="font-mono text-2xl font-bold tracking-wider text-blue-600">
+									{data.home.shareCode}
+								</p>
+								<p class="mt-1 text-xs text-slate-600">Share code</p>
+							</div>
+							<Button onclick={copyShareCode} variant="outline" size="sm">
+								<Copy class="mr-2 h-4 w-4" />
+								{copySuccess ? 'Copied!' : 'Copy Code'}
+							</Button>
 						</div>
-						<Button onclick={copyShareCode} variant="outline" size="sm">
-							<Copy class="mr-2 h-4 w-4" />
-							{copySuccess ? 'Copied!' : 'Copy'}
-						</Button>
+						<div class="flex items-center gap-2">
+							<Input readonly value={inviteUrl} class="flex-1 font-mono text-xs" />
+							<Button onclick={copyInviteLink} variant="outline" size="sm">
+								<Copy class="mr-2 h-4 w-4" />
+								Copy Link
+							</Button>
+						</div>
 					</div>
 				</Accordion.Content>
 			</Accordion.Item>
 		</Accordion.Root>
+
+		<!-- Members Section (Owners only) -->
+		{#if data.userRole === 'owner'}
+			<Accordion.Root type="single" class="rounded-lg border-slate-200 bg-white">
+				<Accordion.Item value="members">
+					<Accordion.Trigger class="px-6 py-4 hover:bg-slate-50">
+						<span class="text-sm font-medium text-slate-900">
+							Members ({data.members.length})
+						</span>
+					</Accordion.Trigger>
+					<Accordion.Content class="px-6 pb-4">
+						<div class="space-y-2 pt-2">
+							{#each data.members as member}
+								<div class="flex items-center justify-between rounded-lg border p-3">
+									<div>
+										<p class="font-medium text-slate-900">{member.name}</p>
+										<p class="text-xs text-slate-500">{member.email}</p>
+									</div>
+									<div class="flex items-center gap-2">
+										<span
+											class="rounded-full px-2 py-1 text-xs font-medium {member.role === 'owner'
+												? 'bg-blue-100 text-blue-700'
+												: 'bg-slate-100 text-slate-700'}"
+										>
+											{member.role === 'owner' ? 'Owner' : 'Member'}
+										</span>
+										{#if member.id !== data.userId}
+											{#if member.role === 'member'}
+												<form method="POST" action="?/promoteMember" use:enhance>
+													<input type="hidden" name="userId" value={member.id} />
+													<Button type="submit" size="sm" variant="outline">
+														Promote to Owner
+													</Button>
+												</form>
+											{/if}
+											<Button
+												size="sm"
+												variant="ghost"
+												onclick={() => {
+													memberToRemove = { id: member.id, name: member.name };
+													confirmRemoveMemberOpen = true;
+												}}
+											>
+												<Trash2 class="h-4 w-4 text-red-500" />
+											</Button>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</Accordion.Content>
+				</Accordion.Item>
+			</Accordion.Root>
+		{/if}
 
 		<!-- Add Room Button -->
 		<div class="flex items-center justify-between">
@@ -689,6 +788,38 @@
 		</div>
 	</Dialog.Content>
 </Dialog.Root>
+
+<!-- Confirm Remove Member Dialog -->
+<Dialog.Root bind:open={confirmRemoveMemberOpen}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Remove Member?</Dialog.Title>
+			<Dialog.Description>
+				Are you sure you want to remove {memberToRemove?.name} from this home?
+			</Dialog.Description>
+		</Dialog.Header>
+		<div class="flex gap-2">
+			<Button variant="outline" class="flex-1" onclick={() => (confirmRemoveMemberOpen = false)}
+				>Cancel</Button
+			>
+			<form
+				method="POST"
+				action="?/removeMember"
+				use:enhance={() => {
+					return async ({ update }) => {
+						await update();
+						confirmRemoveMemberOpen = false;
+					};
+				}}
+				class="flex-1"
+			>
+				<input type="hidden" name="userId" value={memberToRemove?.id} />
+				<Button type="submit" variant="destructive" class="w-full">Remove Member</Button>
+			</form>
+		</div>
+	</Dialog.Content>
+</Dialog.Root>
+
 <!-- Edit Chore Dialog -->
 <Dialog.Root bind:open={editChoreDialogOpen}>
 	<Dialog.Content>

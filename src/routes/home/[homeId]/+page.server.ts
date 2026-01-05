@@ -1,0 +1,546 @@
+import { db } from '$lib/server/db';
+import { homes, rooms, chores, homeMemberships, users } from '$lib/server/db/schema';
+import { fail, redirect } from '@sveltejs/kit';
+import { eq, asc, and } from 'drizzle-orm';
+import type { Actions, PageServerLoad } from './$types';
+
+export const load: PageServerLoad = async ({ locals, params }) => {
+	if (!locals.user) {
+		throw redirect(302, '/login');
+	}
+
+	const homeId = params.homeId;
+
+	// Verify user has access to this home
+	const [membership] = await db
+		.select()
+		.from(homeMemberships)
+		.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+
+	if (!membership) {
+		throw redirect(302, '/');
+	}
+
+	// Fetch home
+	const [home] = await db.select().from(homes).where(eq(homes.id, homeId));
+
+	if (!home) {
+		throw redirect(302, '/');
+	}
+
+	// Fetch user's homes for switcher
+	const userHomes = await db
+		.select({
+			id: homes.id,
+			name: homes.name
+		})
+		.from(homeMemberships)
+		.innerJoin(homes, eq(homeMemberships.homeId, homes.id))
+		.where(eq(homeMemberships.userId, locals.user.id));
+
+	// Fetch all members of this home
+	const members = await db
+		.select({
+			id: users.id,
+			name: users.name,
+			email: users.email,
+			role: homeMemberships.role
+		})
+		.from(homeMemberships)
+		.innerJoin(users, eq(homeMemberships.userId, users.id))
+		.where(eq(homeMemberships.homeId, homeId));
+
+	// Fetch rooms and chores
+	const homeRooms = await db
+		.select()
+		.from(rooms)
+		.where(eq(rooms.homeId, homeId))
+		.orderBy(asc(rooms.order));
+
+	const allChores = await db.select().from(chores);
+
+	// Organize chores by room
+	const roomsWithChores = homeRooms.map((room) => ({
+		...room,
+		chores: allChores.filter((chore) => chore.roomId === room.id)
+	}));
+
+	return {
+		home,
+		rooms: roomsWithChores,
+		userRole: membership.role,
+		userHomes,
+		members,
+		userId: locals.user.id
+	};
+};
+
+export const actions: Actions = {
+	createRoom: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		// Verify membership
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const name = data.get('name')?.toString();
+		const icon = data.get('icon')?.toString();
+
+		if (!name || name.trim().length === 0) {
+			return fail(400, { error: 'Room name is required' });
+		}
+
+		// Get current max order
+		const existingRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId));
+		const maxOrder = existingRooms.length > 0 ? Math.max(...existingRooms.map((r) => r.order)) : -1;
+
+		await db.insert(rooms).values({
+			homeId,
+			name: name.trim(),
+			icon: icon || 'HomeIcon',
+			order: maxOrder + 1
+		});
+
+		return { success: true };
+	},
+
+	deleteRoom: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+
+		if (!roomId) {
+			return fail(400, { error: 'Room ID is required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db.delete(rooms).where(eq(rooms.id, roomId));
+
+		return { success: true };
+	},
+
+	editRoom: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+		const name = data.get('name')?.toString();
+		const icon = data.get('icon')?.toString();
+
+		if (!roomId || !name || name.trim().length === 0) {
+			return fail(400, { error: 'Room ID and name are required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db
+			.update(rooms)
+			.set({
+				name: name.trim(),
+				icon: icon || 'HomeIcon'
+			})
+			.where(eq(rooms.id, roomId));
+
+		return { success: true };
+	},
+
+	createChore: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+		const title = data.get('title')?.toString();
+		const frequencyWeeks = parseInt(data.get('frequencyWeeks')?.toString() || '1');
+
+		if (!roomId || !title || title.trim().length === 0) {
+			return fail(400, { error: 'Room and title are required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db.insert(chores).values({
+			roomId,
+			title: title.trim(),
+			frequencyWeeks: Math.max(1, Math.min(52, frequencyWeeks))
+		});
+
+		return { success: true };
+	},
+
+	completeChore: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const choreId = data.get('choreId')?.toString();
+
+		if (!choreId) {
+			return fail(400, { error: 'Chore ID is required' });
+		}
+
+		// Verify chore belongs to user's home
+		const [chore] = await db.select().from(chores).where(eq(chores.id, choreId));
+		if (!chore) {
+			return fail(404, { error: 'Chore not found' });
+		}
+
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, chore.roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db
+			.update(chores)
+			.set({ lastCompletedAt: new Date() })
+			.where(eq(chores.id, choreId));
+
+		return { success: true };
+	},
+
+	deleteChore: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const choreId = data.get('choreId')?.toString();
+
+		if (!choreId) {
+			return fail(400, { error: 'Chore ID is required' });
+		}
+
+		// Verify chore belongs to user's home
+		const [chore] = await db.select().from(chores).where(eq(chores.id, choreId));
+		if (!chore) {
+			return fail(404, { error: 'Chore not found' });
+		}
+
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, chore.roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db.delete(chores).where(eq(chores.id, choreId));
+
+		return { success: true };
+	},
+
+	editChore: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const choreId = data.get('choreId')?.toString();
+		const title = data.get('title')?.toString();
+		const frequencyWeeks = parseInt(data.get('frequencyWeeks')?.toString() || '1');
+
+		if (!choreId || !title || title.trim().length === 0) {
+			return fail(400, { error: 'Chore ID and title are required' });
+		}
+
+		// Verify chore belongs to user's home
+		const [chore] = await db.select().from(chores).where(eq(chores.id, choreId));
+		if (!chore) {
+			return fail(404, { error: 'Chore not found' });
+		}
+
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, chore.roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db
+			.update(chores)
+			.set({
+				title: title.trim(),
+				frequencyWeeks: Math.max(1, Math.min(52, frequencyWeeks))
+			})
+			.where(eq(chores.id, choreId));
+
+		return { success: true };
+	},
+
+	reorderRoom: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+		const direction = data.get('direction')?.toString();
+
+		if (!roomId || !direction) {
+			return fail(400, { error: 'Room ID and direction are required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		// Get all rooms for this home ordered by order
+		const allRooms = await db
+			.select()
+			.from(rooms)
+			.where(eq(rooms.homeId, homeId))
+			.orderBy(asc(rooms.order));
+		const currentIndex = allRooms.findIndex((r) => r.id === roomId);
+
+		if (currentIndex === -1) {
+			return fail(404, { error: 'Room not found' });
+		}
+
+		// Determine swap target
+		let swapIndex = -1;
+		if (direction === 'up' && currentIndex > 0) {
+			swapIndex = currentIndex - 1;
+		} else if (direction === 'down' && currentIndex < allRooms.length - 1) {
+			swapIndex = currentIndex + 1;
+		}
+
+		if (swapIndex === -1) {
+			return { success: true }; // Already at edge, no-op
+		}
+
+		// Swap orders
+		const currentRoom = allRooms[currentIndex];
+		const swapRoom = allRooms[swapIndex];
+
+		await db.update(rooms).set({ order: swapRoom.order }).where(eq(rooms.id, currentRoom.id));
+		await db.update(rooms).set({ order: currentRoom.order }).where(eq(rooms.id, swapRoom.id));
+
+		return { success: true };
+	},
+
+	reorderRooms: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		const data = await request.formData();
+		const roomIdsJson = data.get('roomIds')?.toString();
+
+		if (!roomIdsJson) {
+			return fail(400, { error: 'Room IDs are required' });
+		}
+
+		const roomIds = JSON.parse(roomIdsJson) as string[];
+
+		// Verify all rooms belong to user's home
+		const allRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId));
+		const roomIdSet = new Set(allRooms.map((r) => r.id));
+
+		for (const roomId of roomIds) {
+			if (!roomIdSet.has(roomId)) {
+				return fail(403, { error: 'Unauthorized' });
+			}
+		}
+
+		// Update order for all rooms
+		for (let i = 0; i < roomIds.length; i++) {
+			await db.update(rooms).set({ order: i }).where(eq(rooms.id, roomIds[i]));
+		}
+
+		return { success: true };
+	},
+
+	leaveHome: async ({ locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership) return fail(403, { error: 'Unauthorized' });
+
+		// Check if user is the sole owner
+		const owners = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.homeId, homeId), eq(homeMemberships.role, 'owner')));
+
+		if (membership.role === 'owner' && owners.length === 1) {
+			return fail(400, {
+				error: 'Cannot leave home as sole owner. Transfer ownership or delete the home first.'
+			});
+		}
+
+		// Remove membership
+		await db
+			.delete(homeMemberships)
+			.where(
+				and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId))
+			);
+
+		// Check if home has any members left
+		const remainingMembers = await db
+			.select()
+			.from(homeMemberships)
+			.where(eq(homeMemberships.homeId, homeId));
+
+		if (remainingMembers.length === 0) {
+			// Set lastMemberLeftAt for cleanup
+			await db.update(homes).set({ lastMemberLeftAt: new Date() }).where(eq(homes.id, homeId));
+		}
+
+		throw redirect(303, '/');
+	},
+
+	promoteMember: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership || membership.role !== 'owner') {
+			return fail(403, { error: 'Only owners can promote members' });
+		}
+
+		const data = await request.formData();
+		const targetUserId = data.get('userId')?.toString();
+
+		if (!targetUserId) {
+			return fail(400, { error: 'User ID is required' });
+		}
+
+		// Verify target user is a member
+		const [targetMembership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, targetUserId), eq(homeMemberships.homeId, homeId)));
+
+		if (!targetMembership) {
+			return fail(404, { error: 'User not found in this home' });
+		}
+
+		// Promote to owner
+		await db
+			.update(homeMemberships)
+			.set({ role: 'owner' })
+			.where(
+				and(eq(homeMemberships.userId, targetUserId), eq(homeMemberships.homeId, homeId))
+			);
+
+		return { success: true };
+	},
+
+	removeMember: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership || membership.role !== 'owner') {
+			return fail(403, { error: 'Only owners can remove members' });
+		}
+
+		const data = await request.formData();
+		const targetUserId = data.get('userId')?.toString();
+
+		if (!targetUserId) {
+			return fail(400, { error: 'User ID is required' });
+		}
+
+		if (targetUserId === locals.user.id) {
+			return fail(400, { error: 'Cannot remove yourself. Use leave home instead.' });
+		}
+
+		// Remove member
+		await db
+			.delete(homeMemberships)
+			.where(and(eq(homeMemberships.userId, targetUserId), eq(homeMemberships.homeId, homeId)));
+
+		return { success: true };
+	},
+
+	deleteHome: async ({ locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership || membership.role !== 'owner') {
+			return fail(403, { error: 'Only owners can delete the home' });
+		}
+
+		// Delete home (cascades to rooms, chores, and memberships)
+		await db.delete(homes).where(eq(homes.id, homeId));
+
+		throw redirect(303, '/');
+	}
+};

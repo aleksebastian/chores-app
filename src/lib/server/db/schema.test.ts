@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { homes, rooms, chores } from './schema';
+import { homes, rooms, chores, users, sessions, homeMemberships } from './schema';
 
 /**
  * Schema validation tests - ensure our database schema has the expected structure
@@ -13,6 +13,7 @@ describe('database schema', () => {
 			expect(columns).toContain('name');
 			expect(columns).toContain('shareCode');
 			expect(columns).toContain('createdAt');
+			expect(columns).toContain('lastMemberLeftAt');
 		});
 	});
 
@@ -35,6 +36,37 @@ describe('database schema', () => {
 			expect(columns).toContain('frequencyWeeks');
 			expect(columns).toContain('lastCompletedAt');
 			expect(columns).toContain('createdAt');
+		});
+	});
+
+	describe('users table', () => {
+		it('has required columns', () => {
+			const columns = Object.keys(users);
+			expect(columns).toContain('id');
+			expect(columns).toContain('email');
+			expect(columns).toContain('hashedPassword');
+			expect(columns).toContain('name');
+			expect(columns).toContain('createdAt');
+		});
+	});
+
+	describe('sessions table', () => {
+		it('has required columns for Lucia', () => {
+			const columns = Object.keys(sessions);
+			expect(columns).toContain('id');
+			expect(columns).toContain('userId');
+			expect(columns).toContain('expiresAt');
+		});
+	});
+
+	describe('homeMemberships table', () => {
+		it('has required columns', () => {
+			const columns = Object.keys(homeMemberships);
+			expect(columns).toContain('id');
+			expect(columns).toContain('userId');
+			expect(columns).toContain('homeId');
+			expect(columns).toContain('role');
+			expect(columns).toContain('joinedAt');
 		});
 	});
 });

@@ -67,24 +67,21 @@ describe('form validation logic', () => {
 		expect(isValidShareCode('')).toBe(false);
 		expect(isValidShareCode(undefined)).toBe(false);
 	});
-});
 
-describe('cookie options', () => {
-	it('sets correct cookie configuration', () => {
-		const getCookieOptions = (isProduction: boolean) => ({
-			path: '/',
-			maxAge: 60 * 60 * 24 * 365, // 1 year
-			httpOnly: true,
-			secure: isProduction,
-			sameSite: 'lax' as const
-		});
+	it('validates user name is not empty', () => {
+		const isEmpty = (name: string | undefined) => !name || name.trim().length === 0;
+		
+		expect(isEmpty('')).toBe(true);
+		expect(isEmpty('   ')).toBe(true);
+		expect(isEmpty(undefined)).toBe(true);
+		expect(isEmpty('John Doe')).toBe(false);
+	});
 
-		const prodOptions = getCookieOptions(true);
-		expect(prodOptions.secure).toBe(true);
-		expect(prodOptions.httpOnly).toBe(true);
-		expect(prodOptions.maxAge).toBe(31536000); // 1 year in seconds
-
-		const devOptions = getCookieOptions(false);
-		expect(devOptions.secure).toBe(false);
+	it('normalizes email to lowercase', () => {
+		const normalizeEmail = (email: string) => email.toLowerCase();
+		
+		expect(normalizeEmail('USER@EXAMPLE.COM')).toBe('user@example.com');
+		expect(normalizeEmail('Test@Test.com')).toBe('test@test.com');
+		expect(normalizeEmail('lowercase@email.com')).toBe('lowercase@email.com');
 	});
 });
