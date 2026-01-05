@@ -4,18 +4,44 @@
 	import { Label } from '$lib/components/ui/label';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Accordion from '$lib/components/ui/accordion';
 	import { Progress } from '$lib/components/ui/progress';
 	import { enhance } from '$app/forms';
-	import { Plus, Check, Trash2, Copy, Home as HomeIcon } from 'lucide-svelte';
+	import {
+		Plus,
+		Check,
+		Trash2,
+		Copy,
+		Home as HomeIcon,
+		Pencil,
+		ChefHat,
+		BedDouble,
+		Bath,
+		Sofa,
+		Brush,
+		Shirt,
+		Warehouse,
+		Car,
+		Sparkles,
+		TreePine,
+		FlowerIcon,
+		Dumbbell,
+		Monitor,
+		BookOpen
+	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	let addRoomDialogOpen = $state(false);
 	let addChoreDialogOpen = $state(false);
+	let editChoreDialogOpen = $state(false);
+	let editRoomDialogOpen = $state(false);
 	let selectedRoomId = $state<string>('');
 	let selectedRoomName = $state<string>('');
 	let copySuccess = $state(false);
+	let newRoomName = $state('');
+	let selectedIcon = $state('HomeIcon');
 
 	// Confirmation dialogs
 	let confirmDeleteRoomOpen = $state(false);
@@ -23,6 +49,12 @@
 	let confirmLeaveHomeOpen = $state(false);
 	let roomToDelete = $state<string>('');
 	let choreToDelete = $state<string>('');
+
+	// Edit chore state
+	let choreToEdit = $state<any>(null);
+
+	// Edit room state
+	let roomToEdit = $state<any>(null);
 
 	// Common household chores
 	const commonChores = [
@@ -51,20 +83,20 @@
 	];
 
 	function calculateProgress(chore: any): number {
-		if (!chore.lastCompletedAt) return 100; // Never completed, show as urgent
+		if (!chore.lastCompletedAt) return 0; // Never completed, show as 0%
 
 		const now = Date.now();
 		const lastCompleted = new Date(chore.lastCompletedAt).getTime();
 		const daysSince = (now - lastCompleted) / (1000 * 60 * 60 * 24);
 		const totalDays = chore.frequencyWeeks * 7;
-		const progress = (daysSince / totalDays) * 100;
+		const progress = ((totalDays - daysSince) / totalDays) * 100;
 
 		return Math.min(100, Math.max(0, progress));
 	}
 
 	function getProgressColor(progress: number): string {
-		if (progress < 50) return 'bg-green-500';
-		if (progress < 80) return 'bg-yellow-500';
+		if (progress >= 50) return 'bg-green-500';
+		if (progress >= 25) return 'bg-yellow-500';
 		return 'bg-red-500';
 	}
 
@@ -103,6 +135,80 @@
 		choreToDelete = choreId;
 		confirmDeleteChoreOpen = true;
 	}
+
+	function openEditChoreDialog(chore: any) {
+		choreToEdit = chore;
+		editChoreDialogOpen = true;
+	}
+
+	function openEditRoomDialog(room: any) {
+		roomToEdit = room;
+		editRoomDialogOpen = true;
+	}
+
+	// Room icon mapping
+	const roomIcons: Record<string, any> = {
+		HomeIcon: HomeIcon,
+		ChefHat: ChefHat,
+		BedDouble: BedDouble,
+		Bath: Bath,
+		Sofa: Sofa,
+		Brush: Brush,
+		Shirt: Shirt,
+		Warehouse: Warehouse,
+		Car: Car,
+		Sparkles: Sparkles,
+		TreePine: TreePine,
+		FlowerIcon: FlowerIcon,
+		Dumbbell: Dumbbell,
+		Monitor: Monitor,
+		BookOpen: BookOpen
+	};
+
+	const iconOptions = [
+		{ name: 'HomeIcon', label: 'Home', component: HomeIcon },
+		{ name: 'ChefHat', label: 'Kitchen', component: ChefHat },
+		{ name: 'BedDouble', label: 'Bedroom', component: BedDouble },
+		{ name: 'Bath', label: 'Bathroom', component: Bath },
+		{ name: 'Sofa', label: 'Living Room', component: Sofa },
+		{ name: 'Brush', label: 'Cleaning', component: Brush },
+		{ name: 'Shirt', label: 'Laundry', component: Shirt },
+		{ name: 'Warehouse', label: 'Storage', component: Warehouse },
+		{ name: 'Car', label: 'Garage', component: Car },
+		{ name: 'Sparkles', label: 'Other', component: Sparkles },
+		{ name: 'TreePine', label: 'Garden', component: TreePine },
+		{ name: 'FlowerIcon', label: 'Patio', component: FlowerIcon },
+		{ name: 'Dumbbell', label: 'Gym', component: Dumbbell },
+		{ name: 'Monitor', label: 'Office', component: Monitor },
+		{ name: 'BookOpen', label: 'Study', component: BookOpen }
+	];
+
+	function suggestIcon(name: string): string {
+		const lowerName = name.toLowerCase();
+		if (lowerName.includes('kitchen')) return 'ChefHat';
+		if (lowerName.includes('bedroom') || lowerName.includes('bed')) return 'BedDouble';
+		if (lowerName.includes('bathroom') || lowerName.includes('bath')) return 'Bath';
+		if (lowerName.includes('living') || lowerName.includes('lounge')) return 'Sofa';
+		if (lowerName.includes('laundry')) return 'Shirt';
+		if (lowerName.includes('garage')) return 'Car';
+		if (lowerName.includes('storage') || lowerName.includes('closet')) return 'Warehouse';
+		if (lowerName.includes('garden') || lowerName.includes('yard')) return 'TreePine';
+		if (lowerName.includes('patio') || lowerName.includes('balcony')) return 'FlowerIcon';
+		if (lowerName.includes('gym') || lowerName.includes('fitness')) return 'Dumbbell';
+		if (lowerName.includes('office') || lowerName.includes('workspace')) return 'Monitor';
+		if (lowerName.includes('study') || lowerName.includes('library')) return 'BookOpen';
+		return 'HomeIcon';
+	}
+
+	function handleRoomNameInput(e: Event) {
+		const input = e.target as HTMLInputElement;
+		newRoomName = input.value;
+		selectedIcon = suggestIcon(newRoomName);
+	}
+
+	function getRoomIcon(room: any) {
+		return roomIcons[room.icon || 'HomeIcon'] || HomeIcon;
+	}
 </script>
 
 <div class="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4">
@@ -117,22 +223,30 @@
 			<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
 		</div>
 
-		<!-- Share Code Card -->
-		<Card.Root class="border-blue-200 bg-blue-50">
-			<Card.Content class="flex items-center justify-between">
-				<div>
-					<p class="text-sm font-medium text-slate-900">Share Code</p>
-					<p class="mt-1 font-mono text-2xl font-bold tracking-wider text-blue-600">
-						{data.home.shareCode}
-					</p>
-					<p class="mt-1 text-xs text-slate-600">Share this code with others to give them access</p>
-				</div>
-				<Button onclick={copyShareCode} variant="outline" size="sm">
-					<Copy class="mr-2 h-4 w-4" />
-					{copySuccess ? 'Copied!' : 'Copy'}
-				</Button>
-			</Card.Content>
-		</Card.Root>
+		<!-- Share Code Accordion -->
+		<Accordion.Root class="rounded-lg border-blue-200 bg-blue-50">
+			<Accordion.Item value="share-code">
+				<Accordion.Trigger class="px-6 py-4 hover:bg-blue-100/50">
+					<span class="text-sm font-medium text-slate-900">Share Code</span>
+				</Accordion.Trigger>
+				<Accordion.Content class="px-6 pb-4">
+					<div class="flex items-center justify-between pt-2">
+						<div>
+							<p class="font-mono text-2xl font-bold tracking-wider text-blue-600">
+								{data.home.shareCode}
+							</p>
+							<p class="mt-1 text-xs text-slate-600">
+								Share this code with others to give them access
+							</p>
+						</div>
+						<Button onclick={copyShareCode} variant="outline" size="sm">
+							<Copy class="mr-2 h-4 w-4" />
+							{copySuccess ? 'Copied!' : 'Copy'}
+						</Button>
+					</div>
+				</Accordion.Content>
+			</Accordion.Item>
+		</Accordion.Root>
 
 		<!-- Add Room Button -->
 		<div class="flex items-center justify-between">
@@ -155,16 +269,22 @@
 		{:else}
 			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
 				{#each data.rooms as room}
+					{@const IconComponent = getRoomIcon(room)}
 					<Card.Root>
 						<Card.Header>
 							<div class="flex items-start justify-between">
-								<div>
-									<Card.Title>{room.name}</Card.Title>
-									<Card.Description
-										>{room.chores.length} chore{room.chores.length !== 1
-											? 's'
-											: ''}</Card.Description
-									>
+								<div class="flex flex-1 items-center gap-3">
+									<div class="rounded-lg bg-blue-100 p-2">
+										<IconComponent class="h-6 w-6 text-blue-600" />
+									</div>
+									<div>
+										<Card.Title>{room.name}</Card.Title>
+										<Card.Description
+											>{room.chores.length} chore{room.chores.length !== 1
+												? 's'
+												: ''}</Card.Description
+										>
+									</div>
 								</div>
 								<div class="flex gap-1">
 									<Button
@@ -173,6 +293,9 @@
 										onclick={() => openAddChoreDialog(room.id, room.name)}
 									>
 										<Plus class="h-4 w-4" />
+									</Button>
+									<Button size="sm" variant="ghost" onclick={() => openEditRoomDialog(room)}>
+										<Pencil class="h-4 w-4 text-blue-600" />
 									</Button>
 									<Button size="sm" variant="ghost" onclick={() => confirmDeleteRoom(room.id)}>
 										<Trash2 class="h-4 w-4 text-red-500" />
@@ -202,6 +325,13 @@
 												<Button
 													size="sm"
 													variant="ghost"
+													onclick={() => openEditChoreDialog(chore)}
+												>
+													<Pencil class="h-4 w-4 text-blue-600" />
+												</Button>
+												<Button
+													size="sm"
+													variant="ghost"
 													onclick={() => confirmDeleteChore(chore.id)}
 												>
 													<Trash2 class="h-4 w-4 text-red-500" />
@@ -209,9 +339,11 @@
 											</div>
 										</div>
 										<div class="space-y-1">
-											<Progress value={progress} class={getProgressColor(progress)} />
+											<Progress value={progress} indicatorClass={getProgressColor(progress)} />
 											<p class="text-xs text-slate-500">
-												Every {chore.frequencyWeeks} week{chore.frequencyWeeks !== 1 ? 's' : ''}
+												{chore.frequencyWeeks === 1
+													? 'Every week'
+													: `Every ${chore.frequencyWeeks} weeks`}
 											</p>
 										</div>
 									</div>
@@ -239,15 +371,104 @@
 				return async ({ update }) => {
 					await update();
 					addRoomDialogOpen = false;
+					newRoomName = '';
+					selectedIcon = 'HomeIcon';
 				};
 			}}
 			class="space-y-4"
 		>
 			<div class="space-y-2">
 				<Label for="room-name">Room Name</Label>
-				<Input id="room-name" name="name" placeholder="Kitchen" required />
+				<Input
+					id="room-name"
+					name="name"
+					placeholder="Kitchen"
+					bind:value={newRoomName}
+					oninput={handleRoomNameInput}
+					required
+				/>
+			</div>
+			<input type="hidden" name="icon" value={selectedIcon} />
+			<div class="space-y-2">
+				<Label>Icon</Label>
+				<div class="grid grid-cols-5 gap-2">
+					{#each iconOptions as icon}
+						{@const IconComp = icon.component}
+						<button
+							type="button"
+							class="flex aspect-square items-center justify-center rounded-lg border-2 p-2 transition-colors {selectedIcon ===
+							icon.name
+								? 'border-blue-600 bg-blue-50'
+								: 'border-slate-200 hover:border-slate-300'}"
+							onclick={() => (selectedIcon = icon.name)}
+						>
+							<IconComp
+								class="h-8 w-8 {selectedIcon === icon.name ? 'text-blue-600' : 'text-slate-600'}"
+							/>
+						</button>
+					{/each}
+				</div>
 			</div>
 			<Button type="submit" class="w-full">Add Room</Button>
+		</form>
+	</Dialog.Content>
+</Dialog.Root>
+
+<!-- Edit Room Dialog -->
+<Dialog.Root bind:open={editRoomDialogOpen}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Edit Room</Dialog.Title>
+			<Dialog.Description>Update room details</Dialog.Description>
+		</Dialog.Header>
+		<form
+			method="POST"
+			action="?/editRoom"
+			use:enhance={() => {
+				return async ({ update }) => {
+					await update();
+					editRoomDialogOpen = false;
+				};
+			}}
+			class="space-y-4"
+		>
+			<input type="hidden" name="roomId" value={roomToEdit?.id} />
+			<div class="space-y-2">
+				<Label for="edit-room-name">Room Name</Label>
+				<Input
+					id="edit-room-name"
+					name="name"
+					placeholder="Kitchen"
+					value={roomToEdit?.name}
+					required
+				/>
+			</div>
+			<div class="space-y-2">
+				<Label>Icon</Label>
+				<div class="grid grid-cols-5 gap-2">
+					{#each iconOptions as icon}
+						{@const IconComp = icon.component}
+						<button
+							type="button"
+							class="flex aspect-square items-center justify-center rounded-lg border-2 p-2 transition-colors {(roomToEdit?.icon ||
+								'HomeIcon') === icon.name
+								? 'border-blue-600 bg-blue-50'
+								: 'border-slate-200 hover:border-slate-300'}"
+							onclick={() => {
+								if (roomToEdit) roomToEdit.icon = icon.name;
+							}}
+						>
+							<IconComp
+								class="h-8 w-8 {(roomToEdit?.icon || 'HomeIcon') === icon.name
+									? 'text-blue-600'
+									: 'text-slate-600'}"
+							/>
+						</button>
+					{/each}
+				</div>
+			</div>
+			<input type="hidden" name="icon" value={roomToEdit?.icon || 'HomeIcon'} />
+			<Button type="submit" class="w-full">Save Changes</Button>
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
@@ -380,5 +601,56 @@
 				<Button type="submit" variant="destructive" class="w-full">Delete Chore</Button>
 			</form>
 		</div>
+	</Dialog.Content>
+</Dialog.Root>
+<!-- Edit Chore Dialog -->
+<Dialog.Root bind:open={editChoreDialogOpen}>
+	<Dialog.Content>
+		<Dialog.Header>
+			<Dialog.Title>Edit Chore</Dialog.Title>
+			<Dialog.Description>Update chore details</Dialog.Description>
+		</Dialog.Header>
+		<form
+			method="POST"
+			action="?/editChore"
+			use:enhance={() => {
+				return async ({ update }) => {
+					await update();
+					editChoreDialogOpen = false;
+				};
+			}}
+			class="space-y-4"
+		>
+			<input type="hidden" name="choreId" value={choreToEdit?.id} />
+			<div class="space-y-2">
+				<Label for="edit-chore-title">Chore Name</Label>
+				<Input
+					id="edit-chore-title"
+					name="title"
+					list="common-chores-edit"
+					placeholder="Vacuum floor"
+					value={choreToEdit?.title}
+					required
+				/>
+				<datalist id="common-chores-edit">
+					{#each commonChores as chore}
+						<option value={chore}></option>
+					{/each}
+				</datalist>
+			</div>
+			<div class="space-y-2">
+				<Label for="edit-frequency">Frequency (weeks)</Label>
+				<Input
+					id="edit-frequency"
+					name="frequencyWeeks"
+					type="number"
+					min="1"
+					max="52"
+					value={choreToEdit?.frequencyWeeks}
+					required
+				/>
+			</div>
+			<Button type="submit" class="w-full">Save Changes</Button>
+		</form>
 	</Dialog.Content>
 </Dialog.Root>

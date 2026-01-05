@@ -43,6 +43,7 @@ export const actions: Actions = {
 
 		const data = await request.formData();
 		const name = data.get('name')?.toString();
+		const icon = data.get('icon')?.toString();
 
 		if (!name || name.trim().length === 0) {
 			return fail(400, { error: 'Room name is required' });
@@ -50,7 +51,8 @@ export const actions: Actions = {
 
 		await db.insert(rooms).values({
 			homeId,
-			name: name.trim()
+			name: name.trim(),
+			icon: icon || 'HomeIcon'
 		});
 
 		return { success: true };
@@ -74,6 +76,36 @@ export const actions: Actions = {
 		}
 
 		await db.delete(rooms).where(eq(rooms.id, roomId));
+
+		return { success: true };
+	},
+
+	editRoom: async ({ request, cookies }) => {
+		const homeId = cookies.get('homeId');
+		if (!homeId) throw redirect(302, '/');
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+		const name = data.get('name')?.toString();
+		const icon = data.get('icon')?.toString();
+
+		if (!roomId || !name || name.trim().length === 0) {
+			return fail(400, { error: 'Room ID and name are required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db
+			.update(rooms)
+			.set({
+				name: name.trim(),
+				icon: icon || 'HomeIcon'
+			})
+			.where(eq(rooms.id, roomId));
 
 		return { success: true };
 	},
@@ -159,6 +191,41 @@ export const actions: Actions = {
 		}
 
 		await db.delete(chores).where(eq(chores.id, choreId));
+
+		return { success: true };
+	},
+
+	editChore: async ({ request, cookies }) => {
+		const homeId = cookies.get('homeId');
+		if (!homeId) throw redirect(302, '/');
+
+		const data = await request.formData();
+		const choreId = data.get('choreId')?.toString();
+		const title = data.get('title')?.toString();
+		const frequencyWeeks = parseInt(data.get('frequencyWeeks')?.toString() || '1');
+
+		if (!choreId || !title || title.trim().length === 0) {
+			return fail(400, { error: 'Chore ID and title are required' });
+		}
+
+		// Verify chore belongs to user's home
+		const [chore] = await db.select().from(chores).where(eq(chores.id, choreId));
+		if (!chore) {
+			return fail(404, { error: 'Chore not found' });
+		}
+
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, chore.roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		await db
+			.update(chores)
+			.set({
+				title: title.trim(),
+				frequencyWeeks: Math.max(1, Math.min(52, frequencyWeeks))
+			})
+			.where(eq(chores.id, choreId));
 
 		return { success: true };
 	},
