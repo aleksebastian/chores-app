@@ -7,6 +7,7 @@
 	import * as Accordion from '$lib/components/ui/accordion';
 	import { Progress } from '$lib/components/ui/progress';
 	import { enhance } from '$app/forms';
+	import { invalidateAll } from '$app/navigation';
 	import {
 		Plus,
 		Check,
@@ -27,11 +28,14 @@
 		FlowerIcon,
 		Dumbbell,
 		Monitor,
-		BookOpen
+		BookOpen,
+		GripVertical
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
+
+	let rooms = $state(data.rooms);
 
 	let addRoomDialogOpen = $state(false);
 	let addChoreDialogOpen = $state(false);
@@ -42,6 +46,13 @@
 	let copySuccess = $state(false);
 	let newRoomName = $state('');
 	let selectedIcon = $state('HomeIcon');
+
+	let draggedRoomId = $state<string | null>(null);
+	let draggedOverRoomId = $state<string | null>(null);
+
+	$effect(() => {
+		rooms = data.rooms;
+	});
 
 	// Confirmation dialogs
 	let confirmDeleteRoomOpen = $state(false);
@@ -209,6 +220,69 @@
 	function getRoomIcon(room: any) {
 		return roomIcons[room.icon || 'HomeIcon'] || HomeIcon;
 	}
+
+	// Drag and drop functions
+	function handleDragStart(roomId: string) {
+		draggedRoomId = roomId;
+	}
+
+	function handleDragOver(e: DragEvent, roomId: string) {
+		e.preventDefault();
+		draggedOverRoomId = roomId;
+	}
+
+	function handleDragEnd() {
+		draggedRoomId = null;
+		draggedOverRoomId = null;
+	}
+
+	async function handleDrop(e: DragEvent, targetRoomId: string) {
+		e.preventDefault();
+		
+		if (!draggedRoomId || draggedRoomId === targetRoomId) {
+			draggedRoomId = null;
+			draggedOverRoomId = null;
+			return;
+		}
+
+		const sourceIndex = rooms.findIndex(r => r.id === draggedRoomId);
+		const targetIndex = rooms.findIndex(r => r.id === targetRoomId);
+
+		if (sourceIndex === -1 || targetIndex === -1) return;
+
+		// Save original order for rollback
+		const originalRooms = [...rooms];
+
+		// Optimistically update UI immediately
+		const newRooms = [...rooms];
+		const [removed] = newRooms.splice(sourceIndex, 1);
+		newRooms.splice(targetIndex, 0, removed);
+		rooms = newRooms;
+
+		// Send to server
+		const formData = new FormData();
+		formData.append('roomIds', JSON.stringify(newRooms.map(r => r.id)));
+
+		try {
+			const response = await fetch('?/reorderRooms', {
+				method: 'POST',
+				body: formData
+			});
+
+			if (!response.ok) {
+				// Rollback on failure
+				rooms = originalRooms;
+				console.error('Failed to reorder rooms');
+			}
+		} catch (error) {
+			// Rollback on error
+			rooms = originalRooms;
+			console.error('Failed to reorder rooms:', error);
+		}
+
+		draggedRoomId = null;
+		draggedOverRoomId = null;
+	}
 </script>
 
 <div class="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4">
@@ -258,7 +332,7 @@
 		</div>
 
 		<!-- Rooms Grid -->
-		{#if data.rooms.length === 0}
+		{#if rooms.length === 0}
 			<Card.Root class="border-dashed">
 				<Card.Content class="flex flex-col items-center justify-center py-12 text-center">
 					<HomeIcon class="mb-4 h-12 w-12 text-slate-400" />
@@ -267,25 +341,36 @@
 				</Card.Content>
 			</Card.Root>
 		{:else}
-			<div class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-				{#each data.rooms as room}
+			<div class="masonry-grid gap-6 md:columns-2 lg:columns-3">
+				{#each rooms as room, index}
 					{@const IconComponent = getRoomIcon(room)}
-					<Card.Root>
-						<Card.Header>
-							<div class="flex items-start justify-between">
-								<div class="flex flex-1 items-center gap-3">
-									<div class="rounded-lg bg-blue-100 p-2">
-										<IconComponent class="h-6 w-6 text-blue-600" />
+					<div
+						draggable="true"
+						ondragstart={() => handleDragStart(room.id)}
+						ondragover={(e) => handleDragOver(e, room.id)}
+						ondragend={handleDragEnd}
+						ondrop={(e) => handleDrop(e, room.id)}
+						class="mb-6 inline-block w-full break-inside-avoid transition-all {draggedRoomId === room.id ? 'opacity-50' : ''} {draggedOverRoomId === room.id && draggedRoomId !== room.id ? 'scale-105' : ''}"
+					>
+						<Card.Root class="cursor-move">
+							<Card.Header>
+								<div class="flex items-start justify-between">
+									<div class="flex flex-1 items-center gap-3">
+										<div class="cursor-grab active:cursor-grabbing">
+											<GripVertical class="h-5 w-5 text-slate-400" />
+										</div>
+										<div class="rounded-lg bg-blue-100 p-2">
+											<IconComponent class="h-6 w-6 text-blue-600" />
+										</div>
+										<div>
+											<Card.Title>{room.name}</Card.Title>
+											<Card.Description
+												>{room.chores.length} chore{room.chores.length !== 1
+													? 's'
+													: ''}</Card.Description
+											>
+										</div>
 									</div>
-									<div>
-										<Card.Title>{room.name}</Card.Title>
-										<Card.Description
-											>{room.chores.length} chore{room.chores.length !== 1
-												? 's'
-												: ''}</Card.Description
-										>
-									</div>
-								</div>
 								<div class="flex gap-1">
 									<Button
 										size="sm"
@@ -351,6 +436,7 @@
 							{/if}
 						</Card.Content>
 					</Card.Root>
+				</div>
 				{/each}
 			</div>
 		{/if}
@@ -654,3 +740,14 @@
 		</form>
 	</Dialog.Content>
 </Dialog.Root>
+<style>
+	.masonry-grid {
+		column-gap: 1.5rem;
+	}
+	
+	@media (max-width: 767px) {
+		.masonry-grid {
+			column-count: 1;
+		}
+	}
+</style>

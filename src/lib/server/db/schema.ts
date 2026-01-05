@@ -14,6 +14,7 @@ export const rooms = sqliteTable('rooms', {
 		.references(() => homes.id, { onDelete: 'cascade' }),
 	name: text('name').notNull(),
 	icon: text('icon'),
+	order: integer('order').notNull().default(0),
 	createdAt: integer('created_at', { mode: 'timestamp' }).$defaultFn(() => new Date())
 });
 

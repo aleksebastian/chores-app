@@ -1,7 +1,7 @@
 import { db } from '$lib/server/db';
 import { homes, rooms, chores } from '$lib/server/db/schema';
 import { fail, redirect } from '@sveltejs/kit';
-import { eq } from 'drizzle-orm';
+import { eq, asc } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
 
 export const load: PageServerLoad = async ({ cookies }) => {
@@ -20,7 +20,7 @@ export const load: PageServerLoad = async ({ cookies }) => {
 		throw redirect(302, '/');
 	}
 
-	const homeRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId));
+	const homeRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId)).orderBy(asc(rooms.order));
 	
 	const allChores = await db.select().from(chores);
 	
@@ -49,10 +49,15 @@ export const actions: Actions = {
 			return fail(400, { error: 'Room name is required' });
 		}
 
+		// Get current max order
+		const existingRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId));
+		const maxOrder = existingRooms.length > 0 ? Math.max(...existingRooms.map(r => r.order)) : -1;
+
 		await db.insert(rooms).values({
 			homeId,
 			name: name.trim(),
-			icon: icon || 'HomeIcon'
+			icon: icon || 'HomeIcon',
+			order: maxOrder + 1
 		});
 
 		return { success: true };
@@ -226,6 +231,85 @@ export const actions: Actions = {
 				frequencyWeeks: Math.max(1, Math.min(52, frequencyWeeks))
 			})
 			.where(eq(chores.id, choreId));
+
+		return { success: true };
+	},
+
+	reorderRoom: async ({ request, cookies }) => {
+		const homeId = cookies.get('homeId');
+		if (!homeId) throw redirect(302, '/');
+
+		const data = await request.formData();
+		const roomId = data.get('roomId')?.toString();
+		const direction = data.get('direction')?.toString();
+
+		if (!roomId || !direction) {
+			return fail(400, { error: 'Room ID and direction are required' });
+		}
+
+		// Verify room belongs to user's home
+		const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
+		if (!room || room.homeId !== homeId) {
+			return fail(403, { error: 'Unauthorized' });
+		}
+
+		// Get all rooms for this home ordered by order
+		const allRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId)).orderBy(asc(rooms.order));
+		const currentIndex = allRooms.findIndex(r => r.id === roomId);
+
+		if (currentIndex === -1) {
+			return fail(404, { error: 'Room not found' });
+		}
+
+		// Determine swap target
+		let swapIndex = -1;
+		if (direction === 'up' && currentIndex > 0) {
+			swapIndex = currentIndex - 1;
+		} else if (direction === 'down' && currentIndex < allRooms.length - 1) {
+			swapIndex = currentIndex + 1;
+		}
+
+		if (swapIndex === -1) {
+			return { success: true }; // Already at edge, no-op
+		}
+
+		// Swap orders
+		const currentRoom = allRooms[currentIndex];
+		const swapRoom = allRooms[swapIndex];
+
+		await db.update(rooms).set({ order: swapRoom.order }).where(eq(rooms.id, currentRoom.id));
+		await db.update(rooms).set({ order: currentRoom.order }).where(eq(rooms.id, swapRoom.id));
+
+		return { success: true };
+	},
+
+	reorderRooms: async ({ request, cookies }) => {
+		const homeId = cookies.get('homeId');
+		if (!homeId) throw redirect(302, '/');
+
+		const data = await request.formData();
+		const roomIdsJson = data.get('roomIds')?.toString();
+
+		if (!roomIdsJson) {
+			return fail(400, { error: 'Room IDs are required' });
+		}
+
+		const roomIds = JSON.parse(roomIdsJson) as string[];
+
+		// Verify all rooms belong to user's home
+		const allRooms = await db.select().from(rooms).where(eq(rooms.homeId, homeId));
+		const roomIdSet = new Set(allRooms.map(r => r.id));
+		
+		for (const roomId of roomIds) {
+			if (!roomIdSet.has(roomId)) {
+				return fail(403, { error: 'Unauthorized' });
+			}
+		}
+
+		// Update order for all rooms
+		for (let i = 0; i < roomIds.length; i++) {
+			await db.update(rooms).set({ order: i }).where(eq(rooms.id, roomIds[i]));
+		}
 
 		return { success: true };
 	},
