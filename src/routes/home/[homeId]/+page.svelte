@@ -30,6 +30,7 @@
 		GripVertical
 	} from 'lucide-svelte';
 	import type { PageData } from './$types';
+	import { goto } from '$app/navigation';
 
 	let { data }: { data: PageData } = $props();
 
@@ -313,7 +314,7 @@
 			<div class="flex items-center gap-4">
 				{#if data.userHomes && data.userHomes.length > 1}
 					<select
-						onchange={(e) => (window.location.href = `/home/${e.currentTarget.value}`)}
+						onchange={(e) => goto(`/home/${e.currentTarget.value}`)}
 						class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm hover:bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:outline-none"
 					>
 						{#each data.userHomes as home}
@@ -331,12 +332,7 @@
 			</div>
 
 			<div>
-				<Button
-					variant="outline"
-					onclick={() => (window.location.href = `/home/${data.home.id}/manage`)}
-				>
-					Manage Home
-				</Button>
+				<Button variant="outline" href="/home/{data.home.id}/manage">Manage Home</Button>
 			</div>
 		</div>
 
@@ -363,13 +359,9 @@
 				{#each rooms as room, index}
 					{@const IconComponent = getRoomIcon(room)}
 					<div
-						role="button"
-						tabindex="0"
+						role="listitem"
 						data-room-id={room.id}
-						draggable="true"
-						ondragstart={() => handleDragStart(room.id)}
 						ondragover={(e) => handleDragOver(e, room.id)}
-						ondragend={handleDragEnd}
 						ondrop={async (e) => {
 							e.preventDefault();
 							if (draggedRoomId && draggedRoomId !== room.id) {
@@ -378,19 +370,37 @@
 							draggedRoomId = null;
 							draggedOverRoomId = null;
 						}}
-						ontouchstart={(e) => handleTouchStart(e, room.id, e.currentTarget as HTMLElement)}
-						ontouchmove={handleTouchMove}
-						ontouchend={handleTouchEnd}
-						class="mb-6 inline-block w-full touch-none break-inside-avoid transition-all {draggedRoomId ===
+						class="mb-6 inline-block w-full break-inside-avoid transition-all {draggedRoomId ===
 						room.id
 							? 'opacity-50'
 							: ''} {draggedOverRoomId === room.id && draggedRoomId !== room.id ? 'scale-105' : ''}"
 					>
-						<Card.Root class="cursor-move">
+						<Card.Root>
 							<Card.Header>
 								<div class="flex items-start justify-between">
 									<div class="flex flex-1 items-center gap-3">
-										<div class="cursor-grab active:cursor-grabbing">
+										<div
+											role="button"
+											tabindex="0"
+											aria-label="Drag to reorder room"
+											class="cursor-grab touch-none active:cursor-grabbing"
+											draggable="true"
+											ondragstart={(e) => {
+												e.stopPropagation();
+												handleDragStart(room.id);
+											}}
+											ondragend={handleDragEnd}
+											ontouchstart={(e) => {
+												e.stopPropagation();
+												handleTouchStart(
+													e,
+													room.id,
+													e.currentTarget.closest('[data-room-id]') as HTMLElement
+												);
+											}}
+											ontouchmove={handleTouchMove}
+											ontouchend={handleTouchEnd}
+										>
 											<GripVertical class="h-5 w-5 text-slate-400" />
 										</div>
 										<div class="rounded-lg bg-blue-100 p-2">

@@ -43,11 +43,7 @@
 	<div class="mx-auto max-w-4xl space-y-6 py-8">
 		<!-- Header with Back Button -->
 		<div class="flex items-center gap-4">
-			<Button
-				variant="outline"
-				size="sm"
-				onclick={() => (window.location.href = `/home/${data.home.id}`)}
-			>
+			<Button variant="outline" size="sm" href="/home/{data.home.id}">
 				<ArrowLeft class="mr-2 h-4 w-4" />
 				Back to Home
 			</Button>

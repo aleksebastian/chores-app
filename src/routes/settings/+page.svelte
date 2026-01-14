@@ -157,7 +157,7 @@
 
 		<!-- Navigation -->
 		<div class="flex justify-between">
-			<Button variant="outline" onclick={() => (window.location.href = '/')}>Back to Home</Button>
+			<Button variant="outline" href="/">Back to Home</Button>
 			<form method="POST" action="/logout" use:enhance>
 				<Button type="submit" variant="outline">Log Out</Button>
 			</form>

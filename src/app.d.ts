@@ -11,6 +11,18 @@ declare global {
 		// interface PageState {}
 		// interface Platform {}
 	}
+
+	// View Transition API types
+	interface ViewTransition {
+		finished: Promise<void>;
+		ready: Promise<void>;
+		updateCallbackDone: Promise<void>;
+		skipTransition: () => void;
+	}
+
+	interface Document {
+		startViewTransition(updateCallback: () => Promise<void> | void): ViewTransition;
+	}
 }
 
 export {};
