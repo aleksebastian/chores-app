@@ -40,15 +40,15 @@
 </script>
 
 <div class="min-h-screen bg-linear-to-br from-slate-50 to-slate-100 p-4">
-	<div class="mx-auto max-w-4xl space-y-6 py-8">
+	<div class="mx-auto max-w-4xl space-y-6 py-4 sm:py-8">
 		<!-- Header with Back Button -->
-		<div class="flex items-center gap-4">
-			<Button variant="outline" size="sm" href="/home/{data.home.id}">
+		<div class="space-y-3">
+			<Button variant="outline" size="sm" href="/home/{data.home.id}" class="w-full sm:w-auto">
 				<ArrowLeft class="mr-2 h-4 w-4" />
 				Back to Home
 			</Button>
 			<div>
-				<h1 class="text-3xl font-bold tracking-tight text-slate-900">Manage Home</h1>
+				<h1 class="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Manage Home</h1>
 				<p class="mt-1 text-sm text-slate-600">{data.home.name}</p>
 			</div>
 		</div>
@@ -60,19 +60,19 @@
 				<Card.Description>Share this code or link to invite people to your home</Card.Description>
 			</Card.Header>
 			<Card.Content>
-				<div class="flex items-center justify-between">
+				<div class="space-y-4">
 					<div>
-						<p class="font-mono text-2xl font-bold tracking-wider text-blue-600">
+						<p class="font-mono text-xl font-bold tracking-wider text-blue-600 sm:text-2xl">
 							{data.home.shareCode}
 						</p>
 						<p class="mt-1 text-xs text-slate-600">Share code or magic link</p>
 					</div>
-					<div class="flex gap-2">
-						<Button onclick={copyShareCode} variant="outline" size="sm">
+					<div class="flex flex-col gap-2 sm:flex-row">
+						<Button onclick={copyShareCode} variant="outline" size="sm" class="w-full sm:w-auto">
 							<Copy class="mr-2 h-4 w-4" />
 							{copySuccess ? 'Copied!' : 'Copy Code'}
 						</Button>
-						<Button onclick={copyInviteLink} variant="outline" size="sm">
+						<Button onclick={copyInviteLink} variant="outline" size="sm" class="w-full sm:w-auto">
 							<Copy class="mr-2 h-4 w-4" />
 							Copy Magic Link
 						</Button>
@@ -89,14 +89,17 @@
 			</Card.Header>
 			<Card.Content class="space-y-2">
 				{#each data.members as member}
-					<div class="flex items-center justify-between rounded-lg border p-3">
-						<div>
-							<p class="font-medium text-slate-900">{member.name}</p>
-							<p class="text-xs text-slate-500">{member.email}</p>
+					<div
+						class="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+					>
+						<div class="min-w-0 flex-1">
+							<p class="truncate font-medium text-slate-900">{member.name}</p>
+							<p class="truncate text-xs text-slate-500">{member.email}</p>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="flex flex-wrap items-center gap-2">
 							<span
-								class="rounded-full px-2 py-1 text-xs font-medium {member.role === 'owner'
+								class="rounded-full px-2 py-1 text-xs font-medium whitespace-nowrap {member.role ===
+								'owner'
 									? 'bg-blue-100 text-blue-700'
 									: 'bg-slate-100 text-slate-700'}"
 							>
@@ -104,9 +107,19 @@
 							</span>
 							{#if member.id !== data.userId && data.userRole === 'owner'}
 								{#if member.role === 'member'}
-									<form method="POST" action="?/promoteMember" use:enhance>
+									<form
+										method="POST"
+										action="?/promoteMember"
+										use:enhance
+										class="flex-1 sm:flex-initial"
+									>
 										<input type="hidden" name="userId" value={member.id} />
-										<Button type="submit" size="sm" variant="outline">Promote to Owner</Button>
+										<Button
+											type="submit"
+											size="sm"
+											variant="outline"
+											class="w-full whitespace-nowrap sm:w-auto">Promote to Owner</Button
+										>
 									</form>
 								{/if}
 								<Button
@@ -134,10 +147,18 @@
 					>Leave this home or delete it permanently (owners only)</Card.Description
 				>
 			</Card.Header>
-			<Card.Content class="flex gap-2">
-				<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
+			<Card.Content class="flex flex-col gap-2 sm:flex-row">
+				<Button
+					variant="outline"
+					onclick={() => (confirmLeaveHomeOpen = true)}
+					class="w-full sm:w-auto">Leave Home</Button
+				>
 				{#if data.userRole === 'owner'}
-					<Button variant="destructive" onclick={() => (confirmDeleteHomeOpen = true)}>
+					<Button
+						variant="destructive"
+						onclick={() => (confirmDeleteHomeOpen = true)}
+						class="w-full sm:w-auto"
+					>
 						Delete Home
 					</Button>
 				{/if}
