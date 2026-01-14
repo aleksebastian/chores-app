@@ -11,7 +11,6 @@
 		Plus,
 		Check,
 		Trash2,
-		Copy,
 		Home as HomeIcon,
 		Pencil,
 		ChefHat,
@@ -42,22 +41,19 @@
 	let editRoomDialogOpen = $state(false);
 	let selectedRoomId = $state<string>('');
 	let selectedRoomName = $state<string>('');
-	let copySuccess = $state(false);
 	let newRoomName = $state('');
 	let selectedIcon = $state('HomeIcon');
-	let inviteUrl = $state('');
 
 	let draggedRoomId = $state<string | null>(null);
 	let draggedOverRoomId = $state<string | null>(null);
+	let touchStartY = $state<number>(0);
+	let touchDraggedElement = $state<HTMLElement | null>(null);
 
 	// Confirmation dialogs
 	let confirmDeleteRoomOpen = $state(false);
 	let confirmDeleteChoreOpen = $state(false);
-	let confirmLeaveHomeOpen = $state(false);
-	let confirmRemoveMemberOpen = $state(false);
 	let roomToDelete = $state<string>('');
 	let choreToDelete = $state<string>('');
-	let memberToRemove = $state<{ id: string; name: string } | null>(null);
 
 	// Edit chore state
 	let choreToEdit = $state<any>(null);
@@ -100,35 +96,17 @@
 		const totalDays = chore.frequencyWeeks * 7;
 		const progress = ((totalDays - daysSince) / totalDays) * 100;
 
+		// Return -1 for overdue chores to handle differently
+		if (progress < 0) return -1;
 		return Math.min(100, Math.max(0, progress));
 	}
 
 	function getProgressColor(progress: number): string {
+		if (progress < 0) return 'bg-red-600'; // Overdue
 		if (progress >= 50) return 'bg-green-500';
 		if (progress >= 25) return 'bg-yellow-500';
 		return 'bg-red-500';
 	}
-
-	function copyShareCode() {
-		navigator.clipboard.writeText(data.home.shareCode);
-		copySuccess = true;
-		setTimeout(() => (copySuccess = false), 2000);
-	}
-
-	function copyInviteLink() {
-		if (typeof window !== 'undefined') {
-			navigator.clipboard.writeText(inviteUrl);
-			copySuccess = true;
-			setTimeout(() => (copySuccess = false), 2000);
-		}
-	}
-
-	// Set invite URL on client side only
-	$effect(() => {
-		if (typeof window !== 'undefined') {
-			inviteUrl = `${window.location.origin}/?code=${data.home.shareCode}`;
-		}
-	});
 
 	function getDaysUntilDue(chore: any): string {
 		if (!chore.lastCompletedAt) return 'Never completed';
@@ -249,16 +227,49 @@
 		draggedOverRoomId = null;
 	}
 
-	async function handleDrop(e: DragEvent, targetRoomId: string) {
-		e.preventDefault();
+	// Touch event handlers for mobile
+	function handleTouchStart(e: TouchEvent, roomId: string, element: HTMLElement) {
+		touchStartY = e.touches[0].clientY;
+		draggedRoomId = roomId;
+		touchDraggedElement = element;
+		element.style.opacity = '0.5';
+	}
 
-		if (!draggedRoomId || draggedRoomId === targetRoomId) {
-			draggedRoomId = null;
-			draggedOverRoomId = null;
-			return;
+	function handleTouchMove(e: TouchEvent) {
+		if (!draggedRoomId || !touchDraggedElement) return;
+
+		e.preventDefault();
+		const touch = e.touches[0];
+		const currentY = touch.clientY;
+
+		// Find which room we're over
+		const elements = document.elementsFromPoint(touch.clientX, currentY);
+		const roomCard = elements.find((el) => el.closest('[data-room-id]'));
+
+		if (roomCard) {
+			const targetRoomId = roomCard.closest('[data-room-id]')?.getAttribute('data-room-id');
+			if (targetRoomId && targetRoomId !== draggedRoomId) {
+				draggedOverRoomId = targetRoomId;
+			}
+		}
+	}
+
+	async function handleTouchEnd(e: TouchEvent) {
+		if (!draggedRoomId || !touchDraggedElement) return;
+
+		touchDraggedElement.style.opacity = '1';
+
+		if (draggedOverRoomId && draggedOverRoomId !== draggedRoomId) {
+			await reorderRooms(draggedRoomId, draggedOverRoomId);
 		}
 
-		const sourceIndex = rooms.findIndex((r) => r.id === draggedRoomId);
+		draggedRoomId = null;
+		draggedOverRoomId = null;
+		touchDraggedElement = null;
+	}
+
+	async function reorderRooms(sourceRoomId: string, targetRoomId: string) {
+		const sourceIndex = rooms.findIndex((r) => r.id === sourceRoomId);
 		const targetIndex = rooms.findIndex((r) => r.id === targetRoomId);
 
 		if (sourceIndex === -1 || targetIndex === -1) return;
@@ -292,9 +303,6 @@
 			rooms = originalRooms;
 			console.error('Failed to reorder rooms:', error);
 		}
-
-		draggedRoomId = null;
-		draggedOverRoomId = null;
 	}
 </script>
 
@@ -322,99 +330,15 @@
 				{/if}
 			</div>
 
-			<div class="flex gap-2">
-				<Button variant="outline" onclick={() => (window.location.href = '/settings')}>
-					Settings
+			<div>
+				<Button
+					variant="outline"
+					onclick={() => (window.location.href = `/home/${data.home.id}/manage`)}
+				>
+					Manage Home
 				</Button>
-				<Button variant="outline" onclick={() => (confirmLeaveHomeOpen = true)}>Leave Home</Button>
 			</div>
 		</div>
-
-		<!-- Share Code and Invite Section -->
-		<Accordion.Root type="single" class="rounded-lg border-blue-200 bg-blue-50">
-			<Accordion.Item value="share-code">
-				<Accordion.Trigger class="px-6 py-4 hover:bg-blue-100/50">
-					<span class="text-sm font-medium text-slate-900">Invite Others</span>
-				</Accordion.Trigger>
-				<Accordion.Content class="px-6 pb-4">
-					<div class="space-y-4 pt-2">
-						<div class="flex items-center justify-between">
-							<div>
-								<p class="font-mono text-2xl font-bold tracking-wider text-blue-600">
-									{data.home.shareCode}
-								</p>
-								<p class="mt-1 text-xs text-slate-600">Share code</p>
-							</div>
-							<Button onclick={copyShareCode} variant="outline" size="sm">
-								<Copy class="mr-2 h-4 w-4" />
-								{copySuccess ? 'Copied!' : 'Copy Code'}
-							</Button>
-						</div>
-						<div class="flex items-center gap-2">
-							<Input readonly value={inviteUrl} class="flex-1 font-mono text-xs" />
-							<Button onclick={copyInviteLink} variant="outline" size="sm">
-								<Copy class="mr-2 h-4 w-4" />
-								Copy Link
-							</Button>
-						</div>
-					</div>
-				</Accordion.Content>
-			</Accordion.Item>
-		</Accordion.Root>
-
-		<!-- Members Section (Owners only) -->
-		{#if data.userRole === 'owner'}
-			<Accordion.Root type="single" class="rounded-lg border-slate-200 bg-white">
-				<Accordion.Item value="members">
-					<Accordion.Trigger class="px-6 py-4 hover:bg-slate-50">
-						<span class="text-sm font-medium text-slate-900">
-							Members ({data.members.length})
-						</span>
-					</Accordion.Trigger>
-					<Accordion.Content class="px-6 pb-4">
-						<div class="space-y-2 pt-2">
-							{#each data.members as member}
-								<div class="flex items-center justify-between rounded-lg border p-3">
-									<div>
-										<p class="font-medium text-slate-900">{member.name}</p>
-										<p class="text-xs text-slate-500">{member.email}</p>
-									</div>
-									<div class="flex items-center gap-2">
-										<span
-											class="rounded-full px-2 py-1 text-xs font-medium {member.role === 'owner'
-												? 'bg-blue-100 text-blue-700'
-												: 'bg-slate-100 text-slate-700'}"
-										>
-											{member.role === 'owner' ? 'Owner' : 'Member'}
-										</span>
-										{#if member.id !== data.userId}
-											{#if member.role === 'member'}
-												<form method="POST" action="?/promoteMember" use:enhance>
-													<input type="hidden" name="userId" value={member.id} />
-													<Button type="submit" size="sm" variant="outline">
-														Promote to Owner
-													</Button>
-												</form>
-											{/if}
-											<Button
-												size="sm"
-												variant="ghost"
-												onclick={() => {
-													memberToRemove = { id: member.id, name: member.name };
-													confirmRemoveMemberOpen = true;
-												}}
-											>
-												<Trash2 class="h-4 w-4 text-red-500" />
-											</Button>
-										{/if}
-									</div>
-								</div>
-							{/each}
-						</div>
-					</Accordion.Content>
-				</Accordion.Item>
-			</Accordion.Root>
-		{/if}
 
 		<!-- Add Room Button -->
 		<div class="flex items-center justify-between">
@@ -441,12 +365,23 @@
 					<div
 						role="button"
 						tabindex="0"
+						data-room-id={room.id}
 						draggable="true"
 						ondragstart={() => handleDragStart(room.id)}
 						ondragover={(e) => handleDragOver(e, room.id)}
 						ondragend={handleDragEnd}
-						ondrop={(e) => handleDrop(e, room.id)}
-						class="mb-6 inline-block w-full break-inside-avoid transition-all {draggedRoomId ===
+						ondrop={async (e) => {
+							e.preventDefault();
+							if (draggedRoomId && draggedRoomId !== room.id) {
+								await reorderRooms(draggedRoomId, room.id);
+							}
+							draggedRoomId = null;
+							draggedOverRoomId = null;
+						}}
+						ontouchstart={(e) => handleTouchStart(e, room.id, e.currentTarget as HTMLElement)}
+						ontouchmove={handleTouchMove}
+						ontouchend={handleTouchEnd}
+						class="mb-6 inline-block w-full touch-none break-inside-avoid transition-all {draggedRoomId ===
 						room.id
 							? 'opacity-50'
 							: ''} {draggedOverRoomId === room.id && draggedRoomId !== room.id ? 'scale-105' : ''}"
@@ -493,11 +428,24 @@
 								{:else}
 									{#each room.chores as chore}
 										{@const progress = calculateProgress(chore)}
-										<div class="space-y-2 rounded-lg border p-3">
+										{@const isOverdue = progress < 0}
+										<div
+											class="space-y-2 rounded-lg border p-3 {isOverdue
+												? 'border-red-200 bg-red-50'
+												: ''}"
+										>
 											<div class="flex items-start justify-between">
 												<div class="flex-1">
-													<p class="font-medium text-slate-900">{chore.title}</p>
-													<p class="text-xs text-slate-600">{getDaysUntilDue(chore)}</p>
+													<p class="font-medium {isOverdue ? 'text-red-900' : 'text-slate-900'}">
+														{chore.title}
+													</p>
+													<p
+														class="text-xs font-semibold {isOverdue
+															? 'text-red-700'
+															: 'text-slate-600'}"
+													>
+														{getDaysUntilDue(chore)}
+													</p>
 												</div>
 												<div class="flex gap-1">
 													<form method="POST" action="?/completeChore" use:enhance>
@@ -523,8 +471,15 @@
 												</div>
 											</div>
 											<div class="space-y-1">
-												<Progress value={progress} indicatorClass={getProgressColor(progress)} />
-												<p class="text-xs text-slate-500">
+												<Progress
+													value={isOverdue ? 100 : progress}
+													indicatorClass={getProgressColor(progress)}
+												/>
+												<p
+													class="text-xs {isOverdue
+														? 'font-medium text-red-600'
+														: 'text-slate-500'}"
+												>
 													{chore.frequencyWeeks === 1
 														? 'Every week'
 														: `Every ${chore.frequencyWeeks} weeks`}
@@ -709,26 +664,6 @@
 	</Dialog.Content>
 </Dialog.Root>
 
-<!-- Confirm Leave Home Dialog -->
-<Dialog.Root bind:open={confirmLeaveHomeOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Leave Home?</Dialog.Title>
-			<Dialog.Description
-				>Are you sure you want to leave this home? You'll need the share code to rejoin.</Dialog.Description
-			>
-		</Dialog.Header>
-		<div class="flex gap-2">
-			<Button variant="outline" class="flex-1" onclick={() => (confirmLeaveHomeOpen = false)}
-				>Cancel</Button
-			>
-			<form method="POST" action="?/leaveHome" use:enhance class="flex-1">
-				<Button type="submit" variant="destructive" class="w-full">Leave Home</Button>
-			</form>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
-
 <!-- Confirm Delete Room Dialog -->
 <Dialog.Root bind:open={confirmDeleteRoomOpen}>
 	<Dialog.Content>
@@ -784,37 +719,6 @@
 			>
 				<input type="hidden" name="choreId" value={choreToDelete} />
 				<Button type="submit" variant="destructive" class="w-full">Delete Chore</Button>
-			</form>
-		</div>
-	</Dialog.Content>
-</Dialog.Root>
-
-<!-- Confirm Remove Member Dialog -->
-<Dialog.Root bind:open={confirmRemoveMemberOpen}>
-	<Dialog.Content>
-		<Dialog.Header>
-			<Dialog.Title>Remove Member?</Dialog.Title>
-			<Dialog.Description>
-				Are you sure you want to remove {memberToRemove?.name} from this home?
-			</Dialog.Description>
-		</Dialog.Header>
-		<div class="flex gap-2">
-			<Button variant="outline" class="flex-1" onclick={() => (confirmRemoveMemberOpen = false)}
-				>Cancel</Button
-			>
-			<form
-				method="POST"
-				action="?/removeMember"
-				use:enhance={() => {
-					return async ({ update }) => {
-						await update();
-						confirmRemoveMemberOpen = false;
-					};
-				}}
-				class="flex-1"
-			>
-				<input type="hidden" name="userId" value={memberToRemove?.id} />
-				<Button type="submit" variant="destructive" class="w-full">Remove Member</Button>
 			</form>
 		</div>
 	</Dialog.Content>
