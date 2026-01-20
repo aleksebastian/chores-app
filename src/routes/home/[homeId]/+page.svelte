@@ -482,7 +482,7 @@
 											</div>
 											<div class="space-y-1">
 												<Progress
-													value={isOverdue ? 100 : progress}
+													value={isOverdue ? 0 : progress}
 													indicatorClass={getProgressColor(progress)}
 												/>
 												<p
