@@ -1,0 +1,46 @@
+{
+	"name": "Chores App",
+	"short_name": "Chores",
+	"description": "A household chores management application to organize and track chores for your home",
+	"start_url": "/",
+	"scope": "/",
+	"display": "standalone",
+	"orientation": "portrait-primary",
+	"background_color": "#ffffff",
+	"theme_color": "#000000",
+	"categories": ["productivity", "lifestyle"],
+	"icons": [
+		{
+			"src": "/icons/android-chrome-192x192.png",
+			"sizes": "192x192",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icons/android-chrome-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "any"
+		},
+		{
+			"src": "/icons/maskable-icon-512x512.png",
+			"sizes": "512x512",
+			"type": "image/png",
+			"purpose": "maskable"
+		}
+	],
+	"shortcuts": [
+		{
+			"name": "Add Chore",
+			"short_name": "Add",
+			"description": "Quickly add a new chore",
+			"url": "/home",
+			"icons": [
+				{
+					"src": "/icons/android-chrome-192x192.png",
+					"sizes": "192x192"
+				}
+			]
+		}
+	]
+}
