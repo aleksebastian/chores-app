@@ -69,7 +69,10 @@
 							method="POST"
 							action="?/updateHomeName"
 							use:enhance={({ cancel }) => {
-								if (!newHomeName.trim()) { cancel(); return; }
+								if (!newHomeName.trim()) {
+									cancel();
+									return;
+								}
 								return async ({ update }) => {
 									await update();
 									editingName = false;
@@ -77,13 +80,7 @@
 							}}
 							class="flex items-center gap-2"
 						>
-							<Input
-								name="name"
-								bind:value={newHomeName}
-								maxlength={100}
-								required
-								class="flex-1"
-							/>
+							<Input name="name" bind:value={newHomeName} maxlength={100} required class="flex-1" />
 							<Button type="submit" size="sm" variant="outline">
 								<Check class="h-4 w-4" />
 							</Button>
@@ -91,7 +88,10 @@
 								type="button"
 								size="sm"
 								variant="ghost"
-								onclick={() => { editingName = false; newHomeName = data.home.name; }}
+								onclick={() => {
+									editingName = false;
+									newHomeName = data.home.name;
+								}}
 							>
 								<X class="h-4 w-4" />
 							</Button>
@@ -99,7 +99,14 @@
 					{:else}
 						<div class="flex items-center gap-2">
 							<span class="flex-1 text-lg font-semibold text-slate-900">{data.home.name}</span>
-							<Button size="sm" variant="outline" onclick={() => { newHomeName = data.home.name; editingName = true; }}>
+							<Button
+								size="sm"
+								variant="outline"
+								onclick={() => {
+									newHomeName = data.home.name;
+									editingName = true;
+								}}
+							>
 								<Pencil class="mr-2 h-4 w-4" />
 								Edit
 							</Button>
