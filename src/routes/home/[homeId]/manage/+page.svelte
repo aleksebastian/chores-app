@@ -2,14 +2,17 @@
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as Dialog from '$lib/components/ui/dialog';
+	import { Input } from '$lib/components/ui/input';
 	import { enhance } from '$app/forms';
-	import { Copy, Trash2, ArrowLeft } from 'lucide-svelte';
+	import { Copy, Trash2, ArrowLeft, Pencil, Check, X } from 'lucide-svelte';
 	import type { PageData } from './$types';
 
 	let { data }: { data: PageData } = $props();
 
 	let copySuccess = $state(false);
 	let inviteUrl = $state('');
+	let editingName = $state(false);
+	let newHomeName = $state('');
 
 	// Confirmation dialogs
 	let confirmLeaveHomeOpen = $state(false);
@@ -52,6 +55,59 @@
 				<p class="mt-1 text-sm text-slate-600">{data.home.name}</p>
 			</div>
 		</div>
+
+		<!-- Home Name Section -->
+		{#if data.userRole === 'owner'}
+			<Card.Root>
+				<Card.Header>
+					<Card.Title>Home Name</Card.Title>
+					<Card.Description>Edit the name of your home</Card.Description>
+				</Card.Header>
+				<Card.Content>
+					{#if editingName}
+						<form
+							method="POST"
+							action="?/updateHomeName"
+							use:enhance={({ cancel }) => {
+								if (!newHomeName.trim()) { cancel(); return; }
+								return async ({ update }) => {
+									await update();
+									editingName = false;
+								};
+							}}
+							class="flex items-center gap-2"
+						>
+							<Input
+								name="name"
+								bind:value={newHomeName}
+								maxlength={100}
+								required
+								class="flex-1"
+							/>
+							<Button type="submit" size="sm" variant="outline">
+								<Check class="h-4 w-4" />
+							</Button>
+							<Button
+								type="button"
+								size="sm"
+								variant="ghost"
+								onclick={() => { editingName = false; newHomeName = data.home.name; }}
+							>
+								<X class="h-4 w-4" />
+							</Button>
+						</form>
+					{:else}
+						<div class="flex items-center gap-2">
+							<span class="flex-1 text-lg font-semibold text-slate-900">{data.home.name}</span>
+							<Button size="sm" variant="outline" onclick={() => { newHomeName = data.home.name; editingName = true; }}>
+								<Pencil class="mr-2 h-4 w-4" />
+								Edit
+							</Button>
+						</div>
+					{/if}
+				</Card.Content>
+			</Card.Root>
+		{/if}
 
 		<!-- Invite Others Section -->
 		<Card.Root>

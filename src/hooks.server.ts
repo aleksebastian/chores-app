@@ -1,4 +1,9 @@
-import { lucia } from '$lib/server/auth';
+import {
+	SESSION_COOKIE_NAME,
+	validateSession,
+	setSessionCookie,
+	deleteSessionCookie
+} from '$lib/server/auth';
 import { db } from '$lib/server/db';
 import { homes } from '$lib/server/db/schema';
 import { lt, and } from 'drizzle-orm';
@@ -6,27 +11,19 @@ import type { Handle } from '@sveltejs/kit';
 
 export const handle: Handle = async ({ event, resolve }) => {
 	// Validate session
-	const sessionId = event.cookies.get(lucia.sessionCookieName);
+	const sessionId = event.cookies.get(SESSION_COOKIE_NAME);
 	if (!sessionId) {
 		event.locals.user = null;
 		event.locals.session = null;
 		return resolve(event);
 	}
 
-	const { session, user } = await lucia.validateSession(sessionId);
+	const { session, user } = await validateSession(sessionId);
 	if (session && session.fresh) {
-		const sessionCookie = lucia.createSessionCookie(session.id);
-		event.cookies.set(sessionCookie.name, sessionCookie.value, {
-			path: '.',
-			...sessionCookie.attributes
-		});
+		setSessionCookie(event.cookies, session.id, session.expiresAt);
 	}
 	if (!session) {
-		const sessionCookie = lucia.createBlankSessionCookie();
-		event.cookies.set(sessionCookie.name, sessionCookie.value, {
-			path: '.',
-			...sessionCookie.attributes
-		});
+		deleteSessionCookie(event.cookies);
 	}
 	event.locals.user = user;
 	event.locals.session = session;

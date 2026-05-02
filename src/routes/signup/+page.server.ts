@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { users } from '$lib/server/db/schema';
-import { hashPassword, validatePassword, lucia } from '$lib/server/auth';
+import { hashPassword, validatePassword, createSession, setSessionCookie } from '$lib/server/auth';
 import { eq } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -62,18 +62,12 @@ export const actions: Actions = {
 			.returning();
 
 		// Create session
-		const sessionExpiry = rememberMe
+		const sessionExpiresInMs = rememberMe
 			? 1000 * 60 * 60 * 24 * 90 // 90 days
 			: 1000 * 60 * 60 * 24 * 30; // 30 days
 
-		const session = await lucia.createSession(user.id, {}, { sessionId: undefined });
-		const sessionCookie = lucia.createSessionCookie(session.id);
-		
-		cookies.set(sessionCookie.name, sessionCookie.value, {
-			path: '.',
-			maxAge: sessionExpiry / 1000,
-			...sessionCookie.attributes
-		});
+		const session = await createSession(user.id, sessionExpiresInMs);
+		setSessionCookie(cookies, session.id, session.expiresAt);
 
 		throw redirect(302, '/');
 	}

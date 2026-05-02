@@ -163,6 +163,34 @@ export const actions: Actions = {
 		return { success: true };
 	},
 
+	updateHomeName: async ({ request, locals, params }) => {
+		if (!locals.user) throw redirect(302, '/login');
+		const homeId = params.homeId;
+
+		const [membership] = await db
+			.select()
+			.from(homeMemberships)
+			.where(and(eq(homeMemberships.userId, locals.user.id), eq(homeMemberships.homeId, homeId)));
+		if (!membership || membership.role !== 'owner') {
+			return fail(403, { error: 'Only owners can rename the home' });
+		}
+
+		const formData = await request.formData();
+		const name = formData.get('name')?.toString().trim();
+
+		if (!name || name.length === 0) {
+			return fail(400, { error: 'Home name cannot be empty' });
+		}
+
+		if (name.length > 100) {
+			return fail(400, { error: 'Home name must be 100 characters or fewer' });
+		}
+
+		await db.update(homes).set({ name }).where(eq(homes.id, homeId));
+
+		return { success: true };
+	},
+
 	deleteHome: async ({ locals, params }) => {
 		if (!locals.user) throw redirect(302, '/login');
 		const homeId = params.homeId;

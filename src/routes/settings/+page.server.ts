@@ -1,7 +1,7 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { db } from '$lib/server/db';
 import { users, sessions, homeMemberships } from '$lib/server/db/schema';
-import { hashPassword, verifyPassword, validatePassword, lucia } from '$lib/server/auth';
+import { hashPassword, verifyPassword, validatePassword, createSession, setSessionCookie } from '$lib/server/auth';
 import { eq, and } from 'drizzle-orm';
 import type { Actions, PageServerLoad } from './$types';
 
@@ -93,12 +93,8 @@ export const actions: Actions = {
 		await db.delete(sessions).where(eq(sessions.userId, locals.user.id));
 
 		// Create new session
-		const session = await lucia.createSession(locals.user.id, {});
-		const sessionCookie = lucia.createSessionCookie(session.id);
-		cookies.set(sessionCookie.name, sessionCookie.value, {
-			path: '.',
-			...sessionCookie.attributes
-		});
+		const session = await createSession(locals.user.id);
+		setSessionCookie(cookies, session.id, session.expiresAt);
 
 		return { success: true, type: 'password', message: 'Password changed successfully' };
 	},
